@@ -18,8 +18,8 @@ except ImportError:
 # Runtime toggle — set by Int8TensorwiseOps.use_triton via the loader node
 _use_triton = True
 
-# QuaRot Configuration
-QUAROT_GROUP_SIZE = 256  # Must be a power of 4 for Regular Hadamard (e.g. 16, 64, 256)
+# ConvRot Configuration
+CONVROT_GROUP_SIZE = 256  # Must be a power of 4 for Regular Hadamard (e.g. 16, 64, 256)
 
 # --- Quantization Utils ---
 
@@ -143,7 +143,7 @@ if _COMFY_OPS_AVAILABLE:
         """
         excluded_names = []
         dynamic_quantize = False # Manual toggle for on-the-fly quantization
-        enable_quarot = False # Toggle for QuaRot Hadamard rotation
+        enable_convrot = False # Toggle for ConvRot Hadamard rotation
         use_triton = True  # Toggle for Triton fused kernel (mirrors _use_triton)
         _is_prequantized = False # Keep this as a status flag, but don't use for detection
         dynamic_lora = False # If True, apply LoRA dynamically at inference; if False, bake into INT8 weights at load time
@@ -156,7 +156,7 @@ if _COMFY_OPS_AVAILABLE:
                 self.register_buffer('weight_scale', None)
                 self._is_quantized = False
                 self._is_per_row = False  # Track quantization granularity
-                self._use_quarot = False  # Track if QuaRot was applied
+                self._use_convrot = False  # Track if ConvRot was applied
                 self._weight_scale_scalar = None  # For scalar (non-tensor) scales
                 self.compute_dtype = torch.bfloat16
                 self.lora_patches = []  # List of (down_scaled, up, start, size) set by INT8ModelPatcher
@@ -243,12 +243,12 @@ if _COMFY_OPS_AVAILABLE:
                     try:
                         import json
                         quant_conf = json.loads(bytes(comfy_quant_tensor.tolist()).decode('utf-8'))
-                        if quant_conf.get("quarot", False):
-                            self._use_quarot = True
-                            Int8TensorwiseOps.enable_quarot = True  # Propagate globally for LoRA
-                            if "quarot_groupsize" in quant_conf:
-                                self._quarot_groupsize = quant_conf["quarot_groupsize"]
-                                Int8TensorwiseOps._global_quarot_groupsize = self._quarot_groupsize
+                        if quant_conf.get("convrot", False):
+                            self._use_convrot = True
+                            Int8TensorwiseOps.enable_convrot = True  # Propagate globally for LoRA
+                            if "convrot_groupsize" in quant_conf:
+                                self._convrot_groupsize = quant_conf["convrot_groupsize"]
+                                Int8TensorwiseOps._global_convrot_groupsize = self._convrot_groupsize
                     except Exception:
                         pass
                 
@@ -298,23 +298,23 @@ if _COMFY_OPS_AVAILABLE:
                             
                             # Log the first time we quantize in this loader pass
                             if not hasattr(Int8TensorwiseOps, '_logged_otf'):
-                                print(f"INT8 Fast: Quantizing on-the-fly (QuaRot: {getattr(Int8TensorwiseOps, 'enable_quarot', False)})")
+                                print(f"INT8 Fast: Quantizing on-the-fly (ConvRot: {getattr(Int8TensorwiseOps, 'enable_convrot', False)})")
                                 Int8TensorwiseOps._logged_otf = True
 
                             # Cast to float32 before rotation and scale computation
                             w_gpu = weight_tensor.to(device, non_blocking=True).float()
                             
-                            self._use_quarot = False
-                            if getattr(Int8TensorwiseOps, "enable_quarot", False) and self.in_features % QUAROT_GROUP_SIZE == 0:
+                            self._use_convrot = False
+                            if getattr(Int8TensorwiseOps, "enable_convrot", False) and self.in_features % CONVROT_GROUP_SIZE == 0:
                                 try:
                                     import logging
-                                    from .quarot import build_hadamard, rotate_weight
-                                    H = build_hadamard(QUAROT_GROUP_SIZE, device=w_gpu.device, dtype=w_gpu.dtype)
-                                    w_gpu = rotate_weight(w_gpu, H, group_size=QUAROT_GROUP_SIZE)
-                                    self._use_quarot = True
+                                    from .convrot import build_hadamard, rotate_weight
+                                    H = build_hadamard(CONVROT_GROUP_SIZE, device=w_gpu.device, dtype=w_gpu.dtype)
+                                    w_gpu = rotate_weight(w_gpu, H, group_size=CONVROT_GROUP_SIZE)
+                                    self._use_convrot = True
                                 except ImportError as e:
                                     import logging
-                                    logging.warning(f"INT8 Fast: QuaRot enabled but quarot module error: {e}")
+                                    logging.warning(f"INT8 Fast: ConvRot enabled but convrot module error: {e}")
                                     
                             q_weight, q_scale = quantize_int8_axiswise(w_gpu, dim=1)
 
@@ -442,9 +442,9 @@ if _COMFY_OPS_AVAILABLE:
                 x_shape = x.shape
                 x_2d = x.reshape(-1, x_shape[-1])
                 
-                if getattr(self, "_use_quarot", False):
-                    from .quarot import build_hadamard, rotate_activation
-                    group_size = getattr(self, "_quarot_groupsize", QUAROT_GROUP_SIZE)
+                if getattr(self, "_use_convrot", False):
+                    from .convrot import build_hadamard, rotate_activation
+                    group_size = getattr(self, "_convrot_groupsize", CONVROT_GROUP_SIZE)
                     H = build_hadamard(group_size, device=x.device, dtype=x.dtype)
                     x_2d = rotate_activation(x_2d, H, group_size=group_size)
                 
@@ -551,12 +551,12 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                     scale = scale.to(device_to)
                 weight_float = dequantize(weight_int8.to(device_to), scale)
 
-                # 2. Handle QuaRot: de-rotate into weight space before patching
-                use_quarot = getattr(module, "_use_quarot", False)
-                if use_quarot:
-                    group_size = getattr(module, "_quarot_groupsize", QUAROT_GROUP_SIZE)
+                # 2. Handle ConvRot: de-rotate into weight space before patching
+                use_convrot = getattr(module, "_use_convrot", False)
+                if use_convrot:
+                    group_size = getattr(module, "_convrot_groupsize", CONVROT_GROUP_SIZE)
                     try:
-                        from .quarot import build_hadamard, rotate_weight
+                        from .convrot import build_hadamard, rotate_weight
                         H = build_hadamard(group_size, device=device_to, dtype=weight_float.dtype)
                         weight_float = rotate_weight(weight_float, H, group_size=group_size)
                     except ImportError:
@@ -567,8 +567,8 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                 patches_list = self.patches.get(key, [])
                 patched_weight_float = comfy.lora.calculate_weight(patches_list, weight_float, key)
 
-                # 4. Handle QuaRot: re-rotate
-                if use_quarot:
+                # 4. Handle ConvRot: re-rotate
+                if use_convrot:
                     patched_weight_float = rotate_weight(patched_weight_float, H, group_size=group_size)
 
                 # 5. Re-quantize back to INT8 using the original scale
@@ -617,13 +617,13 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                         if mid is not None:
                             down_scaled = torch.mm(mid.flatten(1), down.flatten(1)) * scale
 
-                        # If this layer has QuaRot applied, rotate the 'down' matrix
+                        # If this layer has ConvRot applied, rotate the 'down' matrix
                         # so the LoRA delta is coherent with the rotated weight basis:
                         #   W_rot = W @ H^T  =>  ΔW_rot = ΔW @ H^T  =>  rotate down only
-                        if getattr(module, "_use_quarot", False) and down_scaled.shape[1] % QUAROT_GROUP_SIZE == 0:
+                        if getattr(module, "_use_convrot", False) and down_scaled.shape[1] % CONVROT_GROUP_SIZE == 0:
                             try:
-                                from .quarot import build_hadamard, rotate_weight
-                                group_size = getattr(module, "_quarot_groupsize", QUAROT_GROUP_SIZE)
+                                from .convrot import build_hadamard, rotate_weight
+                                group_size = getattr(module, "_convrot_groupsize", CONVROT_GROUP_SIZE)
                                 H = build_hadamard(group_size, device=down_scaled.device, dtype=down_scaled.dtype)
                                 down_scaled = rotate_weight(down_scaled, H, group_size=group_size)
                             except ImportError:

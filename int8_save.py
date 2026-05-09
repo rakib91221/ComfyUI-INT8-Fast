@@ -26,11 +26,11 @@ class INT8ModelSave:
             prompt_info = json.dumps(prompt)
 
         metadata = {}
-        if not args.disable_metadata:
-            metadata["prompt"] = prompt_info
-            if extra_pnginfo is not None:
-                for x in extra_pnginfo:
-                    metadata[x] = json.dumps(extra_pnginfo[x])
+        # if not args.disable_metadata:
+        #     metadata["prompt"] = prompt_info
+        #     if extra_pnginfo is not None:
+        #         for x in extra_pnginfo:
+        #             metadata[x] = json.dumps(extra_pnginfo[x])
 
         output_checkpoint = f"{filename}_{counter:05}_.safetensors"
         output_checkpoint = os.path.join(full_output_folder, output_checkpoint)
@@ -45,9 +45,9 @@ class INT8ModelSave:
             for name, module in model.model.named_modules():
                 if getattr(module, "_is_quantized", False):
                     # 1. Comfy Quant Hint
-                    quant_conf = {"quarot": getattr(module, "_use_quarot", False)}
-                    if hasattr(module, "_quarot_groupsize"):
-                        quant_conf["quarot_groupsize"] = module._quarot_groupsize
+                    quant_conf = {"convrot": getattr(module, "_use_convrot", False)}
+                    if hasattr(module, "_convrot_groupsize"):
+                        quant_conf["convrot_groupsize"] = module._convrot_groupsize
                         
                     # Prepend 'model.' as comfy.sd.save_checkpoint typically adds this to all weights
                     # but may not add it to extra_keys. This ensures they stay alongside weights.

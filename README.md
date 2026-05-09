@@ -3,8 +3,8 @@
 This node speeds up Flux2, Chroma, Z-Image, Ernie Image in ComfyUI by using INT8 quantization, delivering between 1.5~2x faster inference on my 3090 depending on the model. It should work on any NVIDIA GPU with enough INT8 TOPS. It's unlikely to be faster than proper FP8 on 40-Series and above. 
 Works with lora, torch compile (needed to get full speedup).
 
-Pre-quantized checkpoints were recommended for most architectures, but on-the-fly quantization with QuaRot is better in all cases.
-However, QuaRot is also a little slower, so these prequantized models are still useful.
+Pre-quantized checkpoints were recommended for most architectures, but on-the-fly quantization with ConvRot is better in all cases.
+However, ConvRot is also a little slower, so these prequantized models are still useful.
 
 **Shoutout to [vistralis](https://huggingface.co/vistralis) for these:** 
 Make sure to update the node to use them as int8 row-wise was added.
@@ -25,7 +25,7 @@ Make sure to update the node to use them as int8 row-wise was added.
 | Z-Image-Turbo | [Download](https://huggingface.co/bertbobson/Z-Image-Turbo-INT8-Tensorwise) |
 | Anima | [Download](https://huggingface.co/bertbobson/Anima-INT8-QUIP) |
 
-*Z-Image Base weights have been Deprecated in favor of Quarot OTF, which is higher quality.
+*Z-Image Base weights have been Deprecated in favor of Convrot OTF, which is higher quality.
 
 
 # Metrics:
@@ -66,7 +66,7 @@ https://github.com/Nerogar/OneTrainer/pull/1034
 
 If you have a 30-Series GPU, OneTrainer is also the fastest current lora trainer thanks to this. Please go check them out!!
 
-## newgrit1004 for the QuaRot code I basically copied
+## newgrit1004 for the ConvRot code I basically copied
 https://github.com/newgrit1004/ComfyUI-ZImage-Triton
 
 ## silveroxides for providing a base to hack the INT8 conversion code onto.

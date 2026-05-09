@@ -26,7 +26,7 @@ class UNetLoaderINTW8A8:
                 "weight_dtype": (["default", "fp8_e4m3fn", "fp16", "bf16"],),
                 "model_type": (["flux2", "z-image", "chroma", "wan", "ltx2", "qwen", "ernie", "anima"], {"tooltip": "Only used for on the fly quantization, to filter sensitive layers."}),
                 "on_the_fly_quantization": ("BOOLEAN", {"default": False, "tooltip": "Quantize a higher precision model to INT8. If the selected model is already INT8 keep unchecked."}),
-                "enable_quarot": ("BOOLEAN", {"default": True, "tooltip": "Enable QuaRot for better quantization. ~1.1x slower, but near-GGUF_Q8 quality."}),
+                "enable_convrot": ("BOOLEAN", {"default": True, "tooltip": "Enable ConvRot for better quantization. ~1.1x slower, but near-GGUF_Q8 quality."}),
                 "dynamic_lora": ("BOOLEAN", {"default": False, "tooltip": "Apply LoRA dynamically at inference time. Slow. Only works with LoRA. Keep disabled unless you really need this."}),
             },
             "optional": {
@@ -39,7 +39,7 @@ class UNetLoaderINTW8A8:
     CATEGORY = "loaders"
     DESCRIPTION = "Load and Quantize INT8 models with fast triton inference."
 
-    def load_unet(self, unet_name, weight_dtype, model_type, on_the_fly_quantization, enable_quarot=False, dynamic_lora=False, pre_lora=None):
+    def load_unet(self, unet_name, weight_dtype, model_type, on_the_fly_quantization, enable_convrot=False, dynamic_lora=False, pre_lora=None):
         unet_path = folder_paths.get_full_path("diffusion_models", unet_name)
         
         if pre_lora is not None:
@@ -56,7 +56,7 @@ class UNetLoaderINTW8A8:
         # Set quantization flags
         Int8TensorwiseOps.excluded_names = []
         Int8TensorwiseOps.dynamic_quantize = on_the_fly_quantization
-        Int8TensorwiseOps.enable_quarot = enable_quarot
+        Int8TensorwiseOps.enable_convrot = enable_convrot
         Int8TensorwiseOps.use_triton = True
         Int8TensorwiseOps._is_prequantized = False
         Int8TensorwiseOps.dynamic_lora = dynamic_lora
@@ -239,7 +239,7 @@ class PreLoraLoader:
 
         if "lora_name" in node_inputs:
             name = node_inputs["lora_name"]
-            strength = node_inputs.get("lora_strength", 1.0)
+            strength = round(node_inputs.get("lora_strength", 1.0), 2)
             if name != "None" and strength != 0.0:
                 loras.append({"lora_name": name, "lora_strength": strength})
                 
@@ -249,7 +249,7 @@ class PreLoraLoader:
             strength_key = f"lora_strength_{i}"
             if name_key in node_inputs:
                 name = node_inputs[name_key]
-                strength = node_inputs.get(strength_key, 1.0)
+                strength = round(node_inputs.get(strength_key, 1.0), 2)
                 if name != "None" and strength != 0.0:
                     loras.append({"lora_name": name, "lora_strength": strength})
                 i += 1
