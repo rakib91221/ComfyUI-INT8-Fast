@@ -33,6 +33,8 @@ Anima:
 
 Qwen Image 2512
 
+16 Samples per column.
+
 | Metric | FP8 | GGUF Q4 K M | GGUF Q8 | INT8 ConvRot Post-Lora | INT8 ConvRot Pre-Lora | Nunchaku_BestQuality |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | MSE ↓ | `0.01139 ±0.00146` | `0.00874 ±0.00147` | `0.00135 ±0.00058` | `0.00185 ±0.00050` | `0.00111 ±0.00032` ★ | `0.04326 ±0.00328` |
