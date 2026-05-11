@@ -20,7 +20,7 @@ For more info on quality of convrot, lora approaches see the [Metrics](Metrics.m
 ---
 
 Pre-quantized checkpoints were recommended for most architectures, but on-the-fly quantization with ConvRot is better in all cases.
-However, ConvRot is also a little slower, so these prequantized models are still useful.
+However, ConvRot is also a little slower, so these prequantized models are still useful. Avoid using INT8 Tensorwise models.
 
 **Shoutout to [vistralis](https://huggingface.co/vistralis) for these:** 
 
@@ -35,12 +35,13 @@ However, ConvRot is also a little slower, so these prequantized models are still
 
 | Model | Link |
 |-------|------|
-| Chroma1-HD | [Download](https://huggingface.co/bertbobson/Chroma1-HD-INT8Tensorwise) |
-| Z-Image-Base* | ~~[Download](https://huggingface.co/bertbobson/Z-Image-Base-INT8-QUIP)~~ 
-| Z-Image-Turbo | [Download](https://huggingface.co/bertbobson/Z-Image-Turbo-INT8-Tensorwise) |
+| Chroma1-HD² | ~~[Download](https://huggingface.co/bertbobson/Chroma1-HD-INT8Tensorwise)~~ |
+| Z-Image-Base¹ | ~~[Download](https://huggingface.co/bertbobson/Z-Image-Base-INT8-QUIP)~~ 
+| Z-Image-Turbo² | ~~[Download](https://huggingface.co/bertbobson/Z-Image-Turbo-INT8-Tensorwise)~~ |
 | Anima | [Download](https://huggingface.co/bertbobson/Anima-INT8-QUIP) |
 
-*Z-Image Base weights have been Deprecated in favor of Convrot OTF, which is higher quality.
+¹Z-Image Base weights have been Deprecated in favor of Convrot OTF, which is higher quality.
+²Tensorwise models are worse than on the fly quantization since we switched to row-wise INT8
 
 
 # Speed:
