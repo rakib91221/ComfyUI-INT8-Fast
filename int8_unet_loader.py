@@ -6,6 +6,8 @@ import comfy.utils
 import comfy.model_detection
 import comfy.lora
 import comfy.lora_convert
+import comfy.memory_management
+import comfy.model_management
 import logging
 
 from .int8_quant import Int8TensorwiseOps
@@ -60,6 +62,10 @@ class UNetLoaderINTW8A8:
         Int8TensorwiseOps.use_triton = True
         Int8TensorwiseOps._is_prequantized = False
         Int8TensorwiseOps.dynamic_lora = dynamic_lora
+        Int8TensorwiseOps.dynamic_load_device = None
+        if comfy.memory_management.aimdo_enabled and (on_the_fly_quantization or len(loras_to_load) > 0):
+            Int8TensorwiseOps.dynamic_load_device = comfy.model_management.get_torch_device()
+            logging.info(f"INT8 Fast: Aimdo dynamic loading active, using {Int8TensorwiseOps.dynamic_load_device} as a per-layer bake/quant work device.")
         if hasattr(Int8TensorwiseOps, "_logged_otf"):
             delattr(Int8TensorwiseOps, "_logged_otf")
         
@@ -194,7 +200,11 @@ class UNetLoaderINTW8A8:
                     print(f"INT8 Fast: All {len(Int8TensorwiseOps.lora_patches)} LoRA keys successfully baked!")
         finally:
             # Always clear patches after load to avoid sticking
+            dynamic_load_device = Int8TensorwiseOps.dynamic_load_device
             Int8TensorwiseOps.lora_patches = {}
+            Int8TensorwiseOps.dynamic_load_device = None
+            if dynamic_load_device is not None and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             if hasattr(Int8TensorwiseOps, 'applied_lora_patches'):
                 delattr(Int8TensorwiseOps, 'applied_lora_patches')
         

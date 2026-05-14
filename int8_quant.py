@@ -149,6 +149,7 @@ if _COMFY_OPS_AVAILABLE:
         dynamic_lora = False # If True, apply LoRA dynamically at inference; if False, bake into INT8 weights at load time
         lora_patches = {} # Map of model_key -> patch list (from load_lora)
         lora_strength = 1.0
+        dynamic_load_device = None # Set by the loader when Aimdo should avoid a full CPU staging copy
         
         class Linear(manual_cast.Linear):
             def __init__(self, *args, **kwargs):
@@ -204,13 +205,19 @@ if _COMFY_OPS_AVAILABLE:
                         # ComfyUI dynamically patches during inference using lora_compute_dtype()
                         # On most modern GPUs, this evaluates to torch.float16. 
                         # We simulate that exact intermediate cast here to achieve a 1:1 binary match.
-                        import comfy.model_management
-                        device = torch.device("cuda") if torch.cuda.is_available() else tensor.device
+                        device = getattr(Int8TensorwiseOps, "dynamic_load_device", None)
+                        if device is None:
+                            device = tensor.device
                         temp_dtype = comfy.model_management.lora_compute_dtype(device)
                         
-                        tensor_temp = tensor.to(temp_dtype)
+                        tensor_temp = tensor.to(device=device, dtype=temp_dtype, non_blocking=True)
                         result_temp = comfy.lora.calculate_weight(formatted, tensor_temp, key)
                         return result_temp.to(tensor.dtype)
+                    return tensor
+
+                def source_tensor(tensor):
+                    if tensor is not None and getattr(Int8TensorwiseOps, "dynamic_load_device", None) is not None:
+                        return tensor.cpu()
                     return tensor
 
                 scale_key = prefix + "weight_scale"
@@ -291,10 +298,12 @@ if _COMFY_OPS_AVAILABLE:
                         
                         if is_excluded or is_dim1 or not Int8TensorwiseOps.dynamic_quantize:
                             self._is_quantized = False
-                            self.weight = nn.Parameter(weight_tensor, requires_grad=False)
+                            self.weight = nn.Parameter(source_tensor(weight_tensor), requires_grad=False)
                         else:
                             # Quantize on the fly
-                            device = torch.device("cuda") if torch.cuda.is_available() else weight_tensor.device
+                            device = getattr(Int8TensorwiseOps, "dynamic_load_device", None)
+                            if device is None:
+                                device = torch.device("cuda") if torch.cuda.is_available() else weight_tensor.device
                             
                             # Log the first time we quantize in this loader pass
                             if not hasattr(Int8TensorwiseOps, '_logged_otf'):
@@ -318,20 +327,24 @@ if _COMFY_OPS_AVAILABLE:
                                     
                             q_weight, q_scale = quantize_int8_axiswise(w_gpu, dim=1)
 
-                            self.weight = nn.Parameter(q_weight.cpu(), requires_grad=False)
-                            self.register_buffer('weight_scale', q_scale.cpu())
+                            q_weight = q_weight.cpu()
+                            q_scale = q_scale.cpu()
+
+                            self.weight = nn.Parameter(q_weight, requires_grad=False)
+                            self.register_buffer('weight_scale', q_scale)
                             self._weight_scale_scalar = None
                             self._is_quantized = True
                             self._is_per_row = True
+                            del w_gpu, q_weight, q_scale
                     else:
                         self._is_quantized = False
-                        self.weight = nn.Parameter(weight_tensor, requires_grad=False)
+                        self.weight = nn.Parameter(source_tensor(weight_tensor), requires_grad=False)
                 else:
                     missing_keys.append(weight_key)
                 
                 # Assign bias if it exists (already patched if needed)
                 if bias_tensor is not None:
-                    self.bias = nn.Parameter(bias_tensor, requires_grad=False)
+                    self.bias = nn.Parameter(source_tensor(bias_tensor), requires_grad=False)
                 else:
                     self.bias = None
 
