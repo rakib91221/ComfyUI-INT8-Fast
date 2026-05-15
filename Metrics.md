@@ -245,7 +245,7 @@ Qwen Image 2512
 > ★ = best value for that metric &nbsp;|&nbsp; ± = avg of per-timestep SE (std/√n\_seeds) `[--stratify-std]`
 
 
-###Some loras require stochastic lora to work
+### Some loras require stochastic lora to work
 
 Anima, 16 samples:
 
