@@ -667,6 +667,14 @@ if _COMFY_OPS_AVAILABLE:
 # INT8 Model Patcher - Unified LoRA Handling
 # =============================================================================
 
+import inspect
+try:
+    _prefetch_sig = inspect.signature(comfy.lora.prefetch_prepared_value)
+    _use_new_prefetch = len(_prefetch_sig.parameters) == 5
+except Exception:
+    _use_new_prefetch = False
+
+
 class INT8LowVramPatch:
     is_lowvram_patch = True
 
@@ -677,31 +685,40 @@ class INT8LowVramPatch:
         self.lora_mode = lora_mode
         self.prepared_patches = None
 
-    @staticmethod
-    def _prefetch_prepared_value(value, counter, destination, stream=None, copy=True):
-        try:
-            return comfy.lora.prefetch_prepared_value(value, counter, destination, stream, copy)
-        except TypeError as original_error:
-            try:
-                return comfy.lora.prefetch_prepared_value(value, counter, destination)
-            except TypeError:
-                raise original_error
-
     def memory_required(self):
+        if not _use_new_prefetch:
+            return 0
         counter = [0]
         for patch in self.patches[self.key]:
-            self._prefetch_prepared_value(patch[1], counter, None, None, False)
+            comfy.lora.prefetch_prepared_value(patch[1], counter, None, None, False)
         return counter[0]
 
-    def prepare(self, destination, stream, copy=True, commit=True):
-        counter = [0]
-        prepared_patches = [
-            (patch[0], self._prefetch_prepared_value(patch[1], counter, destination, stream, copy), patch[2], patch[3], patch[4])
-            for patch in self.patches[self.key]
-        ]
-        if commit:
-            self.prepared_patches = prepared_patches
-        return prepared_patches
+    def prepare(self, *args, **kwargs):
+        if _use_new_prefetch:
+            # 0.22.0+ signature: prepare(self, destination, stream, copy=True, commit=True)
+            destination = args[0] if len(args) > 0 else kwargs.get("destination")
+            stream = args[1] if len(args) > 1 else kwargs.get("stream")
+            copy = args[2] if len(args) > 2 else kwargs.get("copy", True)
+            commit = args[3] if len(args) > 3 else kwargs.get("commit", True)
+
+            counter = [0]
+            prepared_patches = [
+                (patch[0], comfy.lora.prefetch_prepared_value(patch[1], counter, destination, stream, copy), patch[2], patch[3], patch[4])
+                for patch in self.patches[self.key]
+            ]
+            if commit:
+                self.prepared_patches = prepared_patches
+            return prepared_patches
+        else:
+            # 0.21.1- signature: prepare(self, allocate_buffer, stream)
+            allocate_buffer = args[0] if len(args) > 0 else kwargs.get("allocate_buffer")
+            stream = args[1] if len(args) > 1 else kwargs.get("stream")
+
+            self.prepared_patches = [
+                (patch[0], comfy.lora.prefetch_prepared_value(patch[1], allocate_buffer, stream), patch[2], patch[3], patch[4])
+                for patch in self.patches[self.key]
+            ]
+            return self.prepared_patches
 
     def clear_prepared(self):
         self.prepared_patches = None
