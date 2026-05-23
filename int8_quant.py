@@ -958,12 +958,16 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                             module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
                         self.patch_weight_to_device(weight_key, device_to=device_to)
                     else:
-                        module.weight_lowvram_function = INT8LowVramPatch(
+                        lowvram_patch = INT8LowVramPatch(
                             weight_key,
                             self.patches,
                             module,
                             getattr(Int8TensorwiseOps, "lora_mode", "None"),
                         )
+                        pin_state = getattr(self.model, "dynamic_pins", {}).get(self.load_device, None)
+                        if pin_state is not None:
+                            lowvram_patch._pin_state = pin_state
+                        module.weight_lowvram_function = lowvram_patch
                     
         return res
 
