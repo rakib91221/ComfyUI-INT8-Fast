@@ -124,9 +124,12 @@ Quality results for this run, can be found here: [Anima Results](Metrics.md#anim
 ## FAQ:
 
 Q: It crashes on my 20-Series GPU!
+
 A: Official triton builds have dropped SM75 support in 3.3. You either have to downgrade triton, build it yourself, or find a build that supports it.
 
+
 Q: Pre-Lora doesn't work?
+
 A: Pre-Lora is for baking lora into bf16/fp16 weights before on-the-fly quantization. You can not pre-lora an already quantized checkpoint.
 
 
